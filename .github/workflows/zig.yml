@@ -1,0 +1,83 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+    paths-ignore:
+      - .editorconfig
+      - .gitattributes
+      - .gitignore
+      - .markdownlint
+      - .zigversion
+      - LICENSE
+      - README.md
+      - .github/**
+      - '!.github/workflows/zig.yml'
+      - .vscode/**
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - .editorconfig
+      - .gitattributes
+      - .gitignore
+      - .markdownlint
+      - .zigversion
+      - LICENSE
+      - README.md
+      - .github/**
+      - '!.github/workflows/zig.yml'
+      - .vscode/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & test w/zig
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        version: ['master']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ matrix.version }}
+
+      - name: Lint
+        run: zig fmt --check .
+
+      - name: Build and test
+        run: zig build test --verbose
+
+      - name: Install kcov
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y kcov jq
+
+      - name: Generate coverage reports
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # [ -d .zig-cache/coverage ] || mkdir -pv .zig-cache/coverage
+          # zig test src/root.zig --test-cmd kcov --test-cmd .zig-cache/coverage --test-cmd-bin
+          ####### kcov $PWD/coverage ./zig-cache/o/*/test
+          zig test --test-no-exec -femit-bin=zig-out/bin/tester src/root.zig
+          [ -d zig-out/coverage ] || mkdir -pv zig-out/coverage
+          kcov --clean --include-pattern=src/ --exclude-pattern=lib/std --exclude-pattern=lib/zig zig-out/coverage zig-out/bin/tester
+          jq '. | "coverage: \(.percent_covered), covered: \(.covered_lines) / total \(.total_lines) lines."' zig-out/coverage/tester/coverage.json
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v3
+        with:
+          directory: .zig-cache/coverage/
+          verbose: true
