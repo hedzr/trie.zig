@@ -65,7 +65,7 @@ In your `build.zig.zon`, add a reference to `trie.zig`:
   .paths = .{""},
   .version = "0.0.0",
   .dependencies = .{
-    .trie_lib = .{
+    .trie = .{
       .url = "https://github.com/hedzr/trie.zig/archive/master.tar.gz",
       .hash = "$INSERT_HASH_HERE"
     },
@@ -73,13 +73,13 @@ In your `build.zig.zon`, add a reference to `trie.zig`:
 }
 ```
 
-The hash can be found after run this fetch:
+The hash can also be written and updated by this command line:
 
 ```bash
-zig fetch https://github.com/hedzr/trie.zig/archive/master.tar.gz
+zig fetch https://github.com/hedzr/trie.zig/archive/master.tar.gz --save
 ```
 
-Instead of `master` you can use a specific commit/tag.
+> Instead of `master` you can use a specific commit/tag.
 
 #### Dependency in `build.zig`
 
@@ -87,7 +87,7 @@ Suppose you should already have an executable, something like:
 
 ```zig
     const exe = b.addExecutable(.{
-        .name = "hotiz",
+        .name = "my-app",
         .root_module = exe_mod,
     });
 ```
@@ -95,10 +95,38 @@ Suppose you should already have an executable, something like:
 Add the following line:
 
 ```zig
-exe.root_module.addImport("trie_lib", b.dependency("trie_lib", .{}).module("trie_lib"));
+    const trie_dep = b.dependency("trie", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    std.debug.print("trie_dep: {s} \n", .{trie_dep.builder.modules.keys()});
+    exe.root_module.addImport("trie", trie_dep.module("trie"));
 ```
 
-You can now `const trie = @import("trie_lib");` in your project.
+You can now `const trie = @import("trie");` in your project.
+
+### In your `main.zig`
+
+Now insert these codes as a first look,
+
+```zig
+const trie = @import("trie");
+
+fn trie_test(writer: anytype) !void {
+    const GPA = std.heap.GeneralPurposeAllocator;
+    // var general_purpose_allocator = GPA(.{}){};
+    // const gpa = general_purpose_allocator.allocator();
+    var gpa = GPA(.{ .enable_memory_limit = true }){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    var t = try trie.Trie(trie.NodeValue).init(allocator, "app");
+    defer t.deinit();
+
+    try t.set("logging.file", "/var/log/app/stdout.log");
+    try t.set("logging.rotate", true);
+}
+```
 
 ## LICENSE
 
