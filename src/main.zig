@@ -46,7 +46,21 @@ fn trie_test(writer: anytype) !void {
 
     // print("t: {s} \n", .{try t.dump()});
     const dstr = try t.dump();
-    try writer.print("t.dump: \n{s} \n", .{dstr});
+    try writer.print("\nt.dump: \n{s} \n", .{dstr});
+
+    var v = try t.get("deb.target");
+    try writer.print("\ndeb.target: {s} \n", .{v.string});
+
+    v = try t.get("debfile");
+    try writer.print("debfile: {s} \n", .{v.string});
+    v = try t.get("deb.install");
+    try writer.print("deb.install: {} \n", .{v.boolean});
+    v = try t.get("logging.interval");
+    try writer.print("logging.interval: {} \n", .{v.int});
+    v = try t.get("logging.rotate");
+    try writer.print("logging.rotate: {} \n", .{v.boolean});
+    v = try t.get("debug");
+    try writer.print("debug: {} \n", .{v.boolean});
 }
 
 test "simple test" {

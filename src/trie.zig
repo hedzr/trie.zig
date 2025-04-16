@@ -18,7 +18,7 @@ pub fn Trie(comptime T: type) type {
         alloc: std.heap.ArenaAllocator,
         allocSave: std.mem.Allocator,
         const Self = @This();
-        const delimiter: u8 = '.';
+        pub const delimiter: u8 = '.';
         pub fn init(alloc: std.mem.Allocator, prefix: []const u8) !Self {
             var v = Self{
                 .alloc = std.heap.ArenaAllocator.init(alloc),
@@ -89,6 +89,10 @@ pub fn Trie(comptime T: type) type {
         pub const Error = error{
             OutOfMemory,
             InvalidRange,
+            NotFound,
+            NoData,
+            BranchNodeFound,
+            PartialMatched,
         };
 
         // fn anyToVal(val: anytype) NodeValue {
@@ -102,6 +106,14 @@ pub fn Trie(comptime T: type) type {
         //     }
         // }
 
+        /// join the given strings with delimiter char ('.') and
+        /// return it as keyPath.
+        ///
+        /// A keyPath is a dotted path to point to a (key, value)
+        /// pair entry in this trie tree.
+        ///
+        /// For example, in a pair with (app.debug => false),
+        /// "app.debug" is its keyPath.
         pub fn join(self: *Self, args: anytype) ![]const u8 {
             return self.joinS(self.prefix, args);
         }
@@ -144,33 +156,6 @@ pub fn Trie(comptime T: type) type {
             }
             buffer[pos] = 0;
 
-            // var added = str.len + 1;
-            // if (index == self.len()) {
-            //     var i: usize = 1;
-            //     buffer[self.jointSize] = delimiter;
-            //     while (i < str.len) : (i += 1) {
-            //         buffer[self.jointSize + i] = str[i];
-            //     }
-            // } else {
-            //     if (Self.utf8getIndex(buffer, index, true)) |k| {
-            //         var i: usize = buffer.len - 1;
-            //         while (i >= k) : (i -= 1) {
-            //             if (i + str.len < buffer.len) {
-            //                 buffer[i + str.len] = buffer[i];
-            //             }
-
-            //             if (i == 0) break;
-            //         }
-
-            //         buffer[index] = delimiter;
-            //         i = 1;
-            //         while (i < str.len) : (i += 1) {
-            //             buffer[index + i] = str[i];
-            //         }
-            //         added += 1;
-            //     }
-            // }
-
             self.jointSize = pos;
             return self.str();
         }
@@ -210,6 +195,8 @@ pub fn Trie(comptime T: type) type {
             }
             return 0;
         }
+
+        /// return last joint keyPath recently.
         pub fn str(self: Self) []const u8 {
             if (self.jointBuffer) |buffer| return buffer[0..self.jointSize];
             return "";
@@ -326,11 +313,13 @@ test "simple" {
     var conf = try Trie(NodeValue).init(test_allocator, "app");
     defer conf.deinit();
     try conf.set("a.b.c", 1);
-    try conf.set("a.b.d", 2);
+    try conf.set("a.b.d", 2.3);
     try conf.set("a.b.b", true);
-    try conf.set("a.b", "hello");
-    print("conf: {} \n", .{conf});
-    print("conf: {} \n", .{(try conf.get("a.b")).as([]const u8)});
+
+    try conf.set("a.b", "hello"); // set value to a branch node is ignored
+
+    print("conf: \n{s}\n", .{try conf.dump()});
+    print("conf: {any}\n", .{(try conf.get("a.b.d"))});
 }
 
 // fn varargTest(args: anytype) !void {
@@ -387,4 +376,70 @@ test "trie.set / node.insert" {
     // print("t: {s} \n", .{try t.dump()});
     const dstr = try t.dump();
     print("t.dump: \n{s} \n", .{dstr});
+
+    var v = try t.get("deb.target");
+    print("\ndeb.target: {s} \n", .{v.string});
+    try expect(eql(u8, v.string, "app-debug.deb"));
+
+    v = try t.get("debfile");
+    try expect(eql(u8, v.string, "app-release.deb"));
+
+    v = try t.get("deb.install");
+    try expect(v.boolean == false);
+
+    v = try t.get("logging.interval");
+    try expect(v.int == 3 * 24 * 60 * 60 * 1000 * 1000);
+
+    v = try t.get("debug");
+    try expect(v.boolean == false);
+
+    v = try t.get("logging.rotate");
+    try expect(v.boolean == true);
+
+    const string =
+        \\I
+        \\我
+    ;
+    try expect(string[0] == 'I');
+}
+
+test "trie.get / set" {
+    print("\n", .{});
+
+    var t = try Trie(NodeValue).init(test_allocator, "app");
+    defer t.deinit();
+
+    try t.set("日志.文件", "/var/log/app/stdout.log");
+    try t.set("日志.自动截断", true);
+    try t.set("日志.周期", 3 * 24 * 60 * 60 * 1000 * 1000); // 3 days
+    try t.set("debug", false);
+    try t.set("deb.install", false);
+    try t.set("deb.target", "app-debug.deb");
+    try t.set("debfile", "app-release.deb");
+
+    // print("t: {s} \n", .{try t.dump()});
+    const dstr = try t.dump();
+    print("t.dump: \n{s} \n", .{dstr});
+
+    var v = try t.get("deb.target");
+    print("\ndeb.target: {s} \n", .{v.string});
+    try expect(eql(u8, v.string, "app-debug.deb"));
+
+    v = try t.get("debfile");
+    try expect(eql(u8, v.string, "app-release.deb"));
+
+    v = try t.get("deb.install");
+    try expect(v.boolean == false);
+
+    v = try t.get("debug");
+    try expect(v.boolean == false);
+
+    v = try t.get("日志.文件");
+    try expect(eql(u8, v.string, "/var/log/app/stdout.log"));
+
+    v = try t.get("日志.周期");
+    try expect(v.int == 3 * 24 * 60 * 60 * 1000 * 1000);
+
+    v = try t.get("日志.自动截断");
+    try expect(v.boolean == true);
 }
