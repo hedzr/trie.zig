@@ -229,6 +229,20 @@ pub fn Trie(comptime T: type) type {
         //     return v;
         // }
 
+        /// set value with a dotted path.
+        ///
+        ///    var t = try Trie(NodeValue).init(test_allocator, "app");
+        ///    defer t.deinit();
+        ///
+        ///    try t.set("logging.file", "/var/log/app/stdout.log");
+        ///    try t.set("logging.rotate", true);
+        ///
+        ///    v = try t.get("logging.rotate");
+        ///    try expect(eql(bool, v.boolean, true));
+        ///
+        /// NodeValue holds several simple datatypes, such as string, int, float, and boolean.
+        ///
+        /// Setting value to a branch node is ignored.
         pub fn set(self: *Self, key: []const u8, val: anytype) !void {
             const keyPath = try self.join2(self.prefix, key);
             // std.debug.print("---- trie.set({s}): val ({}): {any} \n", .{ keyPath, @TypeOf(val), val });
@@ -240,11 +254,46 @@ pub fn Trie(comptime T: type) type {
             // const dstr = try self.dump();
             // std.debug.print("t.dump: \n{s} \n\n", .{dstr});
         }
-        pub fn get(self: Self, key: []const u8) !NodeValue {
-            _ = .{ self, key };
-            return .{ .string = "" };
+        /// get value associated with a dotted path.
+        ///
+        ///    var t = try Trie(NodeValue).init(test_allocator, "app");
+        ///    defer t.deinit();
+        ///
+        ///    try t.set("logging.file", "/var/log/app/stdout.log");
+        ///    try t.set("logging.rotate", true);
+        ///
+        ///    v = try t.get("logging.rotate");
+        ///    try expect(eql(bool, v.boolean, true));
+        pub fn get(self: *Self, key: []const u8) !*NodeValue {
+            const keyPath = try self.join2(self.prefix, key);
+            // _ = .{ self, key };
+            // return .{ .string = "" };
+            const ret = self.search(keyPath);
+            if (ret.node) |node| {
+                if (!ret.partialMatched) {
+                    if (node.isBranch()) {
+                        // branch = true;
+                        if (!node.endsWith(delimiter)) {
+                            return Error.PartialMatched;
+                        }
+                        return Error.BranchNodeFound;
+                    }
+                    if (node.hasData()) {
+                        if (node.data) |d| {
+                            return d;
+                        }
+                    }
+                    return Error.NoData;
+                }
+                return Error.PartialMatched;
+            }
+            return Error.NotFound;
         }
-
+        fn search(self: Self, key: []const u8) Node(T).matchReturn {
+            var found = self.root;
+            const ret = found.matchR(key, found);
+            return ret;
+        }
         pub fn dump(self: *Self) ![]const u8 {
             const alloc = self.alloc.allocator();
             const bp = try BufferPrinter.init(alloc);

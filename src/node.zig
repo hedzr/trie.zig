@@ -50,7 +50,7 @@ pub fn Node(comptime T: type) type {
             return self.nodetype.leaf;
         }
         pub fn hasData(self: Self) bool {
-            return self.nodetype.with_data and self.data;
+            return self.nodetype.with_data and self.data != null;
         }
         pub fn hasChild(self: Self) bool {
             return self.children and self.children.?.len > 0;
@@ -59,6 +59,9 @@ pub fn Node(comptime T: type) type {
         fn min(comptime TT: type, a: TT, b: TT) TT {
             return if (a < b) a else b;
         }
+        // fn max(comptime TT: type, a: TT, b: TT) TT {
+        //     return if (a > b) a else b;
+        // }
 
         fn findCommonPrefixLength(self: Self, word: []const u8) usize {
             // const minl = min(word.len, self.fragment.?.len);
@@ -71,6 +74,102 @@ pub fn Node(comptime T: type) type {
                 }
             }
             return l;
+        }
+
+        pub fn endsWith(self: *Self, ch: u8) bool {
+            if (self.fragment) |frag| {
+                if (frag.len > 0 and frag[frag.len - 1] == ch) return true;
+            }
+            return false;
+        }
+
+        pub const matchReturn = struct {
+            node: ?*Self = null,
+            parent: ?*Self = null,
+            matched: bool = false,
+            partialMatched: bool = false,
+            lastRuneIsDelimiter: bool = false,
+        }; // trie: *trietree.Trie(T),
+        const delimiter = '.';
+        pub fn matchR(self: *Self, word: []const u8, parentNode: *Self) matchReturn {
+            const base = self;
+            if (word.len == 0) return .{ .node = base };
+
+            var matched = false;
+            var partialMatched = false;
+            var lastRuneIsDelimiter = false;
+            var child: ?*Self = null;
+            var parent: ?*Self = null;
+            var srcMatchedL: usize = 0;
+            var dstMatchedL: usize = 0;
+            const l = base.fragment.?.len;
+            const wl = word.len;
+            const minL: usize = min(usize, l, wl);
+            // const maxL: usize = max(usize, l, wl);
+
+            while (srcMatchedL < minL) : (srcMatchedL += 1) {
+                const ch = base.fragment.?[srcMatchedL];
+                if (ch == word[srcMatchedL]) {
+                    lastRuneIsDelimiter = ch == delimiter;
+                    continue; // first comparing loop, assume the index to base.path and word are both identical.
+                }
+
+                dstMatchedL = srcMatchedL; // sync the index now
+
+                // if partial matched,
+                if (srcMatchedL < l) {
+                    if (srcMatchedL < wl) {
+                        if (lastRuneIsDelimiter) {
+                            // matching "/*filepath"
+                            if (ch == '*') {}
+                            // matching "/:id/"
+                            if (ch == ':') {}
+                        }
+                        // NOT matched and shall stop.
+                        // eg: matching 'apple' on 'apk'
+                        return .{};
+                    }
+                    // matched.
+                    // eg: matching 'app' on 'apple', or 'apk' on 'apple'
+                    return .{ .node = base, .parent = parentNode, .matched = true };
+                }
+            }
+
+            if (srcMatchedL == l - 1 and base.fragment.?[srcMatchedL] == delimiter) {
+                matched = true;
+                child = base;
+                parent = parentNode;
+            } else if (minL < l and srcMatchedL == minL) {
+                partialMatched = true;
+                child = base;
+                parent = parentNode;
+            } else if (minL >= l and srcMatchedL == minL and minL > 0 and srcMatchedL > 0 and !partialMatched) {
+                matched = true;
+                child = base;
+                parent = parentNode;
+            }
+            if (minL < wl) {
+                if (base.children) |c| {
+                    if (c.len == 0) {
+                        return .{ .node = child, .parent = parent, .matched = false, .partialMatched = true, .lastRuneIsDelimiter = lastRuneIsDelimiter };
+                    }
+                } else {
+                    return .{ .node = child, .parent = parent, .matched = false, .partialMatched = true, .lastRuneIsDelimiter = lastRuneIsDelimiter };
+                }
+
+                // restPart := word[minL:]
+                if (dstMatchedL == 0) {
+                    dstMatchedL = minL;
+                }
+                const restPart = word[dstMatchedL..];
+                for (base.children.?) |c| {
+                    const ret = c.matchR(restPart, self);
+                    if (ret.matched or ret.partialMatched) {
+                        return ret;
+                    }
+                }
+            }
+            return .{ .node = child, .parent = parent, .matched = matched, .partialMatched = partialMatched, .lastRuneIsDelimiter = lastRuneIsDelimiter };
         }
 
         pub const insertReturn = struct {
@@ -317,15 +416,15 @@ pub const NodeValue = union(NodeValueType) {
             else => return undefined,
         }
     }
-    pub fn as(self: Self, comptime T: type) T {
-        switch (self) {
-            NodeValueType.int => |v| return v,
-            NodeValueType.float => |v| return v,
-            NodeValueType.boolean => |v| return v,
-            NodeValueType.string => |v| return v,
-            else => return undefined,
-        }
-    }
+    // pub fn as(self: Self, comptime T: type) T {
+    //     switch (self) {
+    //         NodeValueType.int => |v| return v,
+    //         NodeValueType.float => |v| return v,
+    //         NodeValueType.boolean => |v| return v,
+    //         NodeValueType.string => |v| return v,
+    //         else => return undefined,
+    //     }
+    // }
     pub fn toString(self: Self, alloc: std.mem.Allocator) ![]const u8 {
         switch (self) {
             NodeValueType.int => |v| return fmtcvt.allocNumericToStr(alloc, v),
