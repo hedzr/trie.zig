@@ -77,7 +77,7 @@ jobs:
           [ -d zig-out/coverage ] || mkdir -pv zig-out/coverage
           ls -la --color zig-out/bin/
           echo "docker run ..."
-          docker run -it --rm --name kcov -v $PWD:/code kcov/kcov --clean --include-pattern=/code/src/ --exclude-pattern=lib/std --exclude-pattern=lib/zig --dump-summary /code/zig-out/coverage /code/zig-out/bin/tester
+          docker run -i --rm --name kcov -v $PWD:/code kcov/kcov --clean --include-pattern=/code/src/ --exclude-pattern=lib/std --exclude-pattern=lib/zig --dump-summary /code/zig-out/coverage /code/zig-out/bin/tester
           echo "jq processing ..."
           jq '. | "coverage: \(.percent_covered), covered: \(.covered_lines) / total \(.total_lines) lines."' zig-out/coverage/tester/coverage.json
 
