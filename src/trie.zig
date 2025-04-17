@@ -93,6 +93,7 @@ pub fn Trie(comptime T: type) type {
             NoData,
             BranchNodeFound,
             PartialMatched,
+            StopNow,
         };
 
         // fn anyToVal(val: anytype) NodeValue {
@@ -281,13 +282,46 @@ pub fn Trie(comptime T: type) type {
             const ret = found.matchR(key, found);
             return ret;
         }
+
+        /// dump the internal structure of this trie tree.
+        /// The returning string can be printed to console.
         pub fn dump(self: *Self) ![]const u8 {
             const alloc = self.alloc.allocator();
             const bp = try BufferPrinter.init(alloc);
             return self.root.dump(bp);
         }
+
+        /// walk for each children node.
+        ///
+        ///    try t.walk(walkOnTTree);
+        ///
+        ///    fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
+        ///        _ = props.level;
+        ///        const delim = props.trie.delimiter;
+        ///        const alloc = props.trie.alloc.allocator();
+        ///        const node = props.node;
+        ///        if (node.endsWith(delim) and node.isBranch()) {
+        ///            print("{}. {s}/\n", .{ props.level, key });
+        ///        } else if (node.isLeaf()) {
+        ///            var vs: []const u8 = "(null)";
+        ///            if (val) |v| {
+        ///                vs = v.toString(alloc) catch "(nothing)";
+        ///            }
+        ///            print("{}. {s} => {s}  ; '{s}'\n", .{ props.level, key, vs, node.fragment.? });
+        ///        }
+        ///        return false;
+        ///    }
+        ///
+        /// Returning true can stop walk() right now, so it's always false in normal case.
+        pub fn walk(self: *Self, cb: fn (key: []const u8, val: ?*T, props: anytype) bool) !void {
+            return self.root.walk(self, cb);
+        }
     };
 }
+
+// TODO send struct into trie-tree
+// TODO send map/array into trie-tree
+// TODO parsing and loading toml file or string
 
 const std = @import("std");
 const builtin = std.builtin;
@@ -442,4 +476,38 @@ test "trie.get / set" {
 
     v = try t.get("日志.自动截断");
     try expect(v.boolean == true);
+}
+
+test "walker" {
+    print("\n", .{});
+
+    var t = try Trie(NodeValue).init(test_allocator, "app");
+    defer t.deinit();
+
+    try t.set("logging.file", "/var/log/app/stdout.log");
+    try t.set("logging.rotate", true);
+    try t.set("logging.interval", 3 * 24 * 60 * 60 * 1000 * 1000); // 3 days
+    try t.set("debug", false);
+    try t.set("deb.install", false);
+    try t.set("deb.target", "app-debug.deb");
+    try t.set("debfile", "app-release.deb");
+
+    try t.walk(walkOnTTree);
+}
+
+fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
+    _ = props.level;
+    const delim = props.trie.delimiter;
+    const alloc = props.trie.alloc.allocator();
+    const node = props.node;
+    if (node.endsWith(delim) and node.isBranch()) {
+        print("{}. {s}/\n", .{ props.level, key });
+    } else if (node.isLeaf()) {
+        var vs: []const u8 = "(null)";
+        if (val) |v| {
+            vs = v.toString(alloc) catch "(nothing)";
+        }
+        print("{}. {s} => {s}  ; '{s}'\n", .{ props.level, key, vs, node.fragment.? });
+    }
+    return false;
 }

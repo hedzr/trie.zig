@@ -76,7 +76,7 @@ pub fn Node(comptime T: type) type {
             return l;
         }
 
-        pub fn endsWith(self: *Self, ch: u8) bool {
+        pub fn endsWith(self: *const Self, ch: u8) bool {
             if (self.fragment) |frag| {
                 if (frag.len > 0 and frag[frag.len - 1] == ch) return true;
             }
@@ -312,6 +312,22 @@ pub fn Node(comptime T: type) type {
                 }
             }
             return pb.str();
+        }
+
+        pub fn walk(self: Self, trie: *trietree.Trie(T), cb: fn (key: []const u8, val: ?*T, props: anytype) bool) !void {
+            return self.walkR(trie, cb, &self, 0);
+        }
+        fn walkR(self: Self, trie: *trietree.Trie(T), cb: fn (key: []const u8, val: ?*T, props: anytype) bool, ptr: *const Self, level: usize) !void {
+            const stop = cb(ptr.path, ptr.data, .{ .level = level, .node = ptr, .trie = trie });
+            if (stop) return trietree.Trie(T).Error.StopNow;
+            if (ptr.children) |c| {
+                const l = level + 1;
+                for (c) |child| {
+                    // stop = cb(child.path, child.data, .{ .level = l, .node = child, .trie = trie });
+                    // if (stop) return;
+                    try self.walkR(trie, cb, child, l);
+                }
+            }
         }
     };
 }

@@ -128,6 +128,60 @@ fn trie_test(writer: anytype) !void {
 }
 ```
 
+## APIs
+
+### get
+
+Get leaf node value by its dotted path, or an `Error` on unexisted node or branch node.
+
+### set
+
+Set `(key, value)` pair into trie tree.
+
+### dump
+
+Dump internal structure for debugging purpose.
+
+### walk
+
+Walk on all nodes.
+
+```zig
+test "walker" {
+    print("\n", .{});
+
+    var t = try Trie(NodeValue).init(test_allocator, "app");
+    defer t.deinit();
+
+    try t.set("logging.file", "/var/log/app/stdout.log");
+    try t.set("logging.rotate", true);
+    try t.set("logging.interval", 3 * 24 * 60 * 60 * 1000 * 1000); // 3 days
+    try t.set("debug", false);
+    try t.set("deb.install", false);
+    try t.set("deb.target", "app-debug.deb");
+    try t.set("debfile", "app-release.deb");
+
+    try t.walk(walkOnTTree);
+}
+
+fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
+    _ = props.level;
+    const delim = props.trie.delimiter;
+    const alloc = props.trie.alloc.allocator();
+    const node = props.node;
+    if (node.endsWith(delim) and node.isBranch()) {
+        print("{}. {s}/\n", .{ props.level, key });
+    } else if (node.isLeaf()) {
+        var vs: []const u8 = "(null)";
+        if (val) |v| {
+            vs = v.toString(alloc) catch "(nothing)";
+        }
+        print("{}. {s} => {s}  ; '{s}'\n", .{ props.level, key, vs, node.fragment.? });
+    }
+    return false;
+}
+```
+
 ## LICENSE
 
 Apache 2.0
