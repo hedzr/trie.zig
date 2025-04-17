@@ -3,6 +3,8 @@ const trietree = @import("trie.zig");
 
 pub const BufferPrinter = @import("bufprt.zig").BufferPrinter;
 
+pub const delimiter: u8 = '.';
+
 pub const Type = packed struct {
     leaf: bool = false,
     with_data: bool = false,
@@ -90,7 +92,7 @@ pub fn Node(comptime T: type) type {
             partialMatched: bool = false,
             lastRuneIsDelimiter: bool = false,
         }; // trie: *trietree.Trie(T),
-        const delimiter = '.';
+
         pub fn matchR(self: *Self, word: []const u8, parentNode: *Self) matchReturn {
             const base = self;
             if (word.len == 0) return .{ .node = base };

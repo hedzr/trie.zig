@@ -3,6 +3,7 @@ pub const NodeValue = nodeobj.NodeValue;
 pub const NodeValueType = nodeobj.NodeValueType;
 pub const NodeType = nodeobj.Type;
 pub const BufferPrinter = @import("bufprt.zig").BufferPrinter;
+pub const delimiter: u8 = nodeobj.delimiter;
 
 const nodeobj = @import("node.zig");
 const fmtcvt = @import("fmtcvt.zig");
@@ -497,7 +498,7 @@ test "walker" {
 
 fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
     _ = props.level;
-    const delim = props.trie.delimiter;
+    const delim = delimiter;
     const alloc = props.trie.alloc.allocator();
     const node = props.node;
     if (node.endsWith(delim) and node.isBranch()) {
