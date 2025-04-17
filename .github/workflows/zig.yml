@@ -73,7 +73,7 @@ jobs:
           ####### kcov $PWD/coverage ./zig-cache/o/*/test
           zig test --test-no-exec -femit-bin=zig-out/bin/tester src/root.zig
           [ -d zig-out/coverage ] || mkdir -pv zig-out/coverage
-          docker run -it --rm --name kcov kcov/kcov --clean --include-pattern=src/ --exclude-pattern=lib/std --exclude-pattern=lib/zig zig-out/coverage zig-out/bin/tester
+          docker run -it --rm --name kcov -v $PWD:/code kcov/kcov --clean --include-pattern=/code/src/ --exclude-pattern=lib/std --exclude-pattern=lib/zig --dump-summary zig-out/coverage zig-out/bin/tester
           jq '. | "coverage: \(.percent_covered), covered: \(.covered_lines) / total \(.total_lines) lines."' zig-out/coverage/tester/coverage.json
 
       - name: Upload coverage reports to Codecov
