@@ -8,6 +8,36 @@ pub const delimiter: u8 = nodeobj.delimiter;
 const nodeobj = @import("node.zig");
 const fmtcvt = @import("fmtcvt.zig");
 
+const toml = @import("toml");
+
+// const DottedIdentifier = std.TailQueue([]const u8);
+
+const Address = struct {
+    port: i64,
+    host: []const u8,
+};
+
+const Config = struct {
+    master: bool,
+    expires_at: toml.DateTime,
+    description: []const u8,
+
+    local: *Address,
+    peers: []const Address,
+};
+
+fn loadTOML(allocator: Allocator, file: []const u8) !void {
+    var parser = toml.Parser(Config).init(allocator);
+    defer parser.deinit();
+
+    var result = try parser.parseFile(file);
+    defer result.deinit();
+
+    const config = result.value;
+    std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
+    std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
+}
+
 pub fn Trie(comptime T: type) type {
     return struct {
         prefix: []const u8,
@@ -19,7 +49,6 @@ pub fn Trie(comptime T: type) type {
         alloc: std.heap.ArenaAllocator,
         allocSave: std.mem.Allocator,
         const Self = @This();
-        pub const delimiter: u8 = '.';
         pub fn init(alloc: std.mem.Allocator, prefix: []const u8) !Self {
             var v = Self{
                 .alloc = std.heap.ArenaAllocator.init(alloc),
@@ -148,7 +177,7 @@ pub fn Trie(comptime T: type) type {
                 pos += 1;
             }
             if (pos > 0) {
-                buffer[pos] = delimiter;
+                buffer[pos] = nodeobj.delimiter;
                 pos += 1;
             }
             i = 0;
@@ -262,7 +291,7 @@ pub fn Trie(comptime T: type) type {
                 if (!ret.partialMatched) {
                     if (node.isBranch()) {
                         // branch = true;
-                        if (!node.endsWith(delimiter)) {
+                        if (!node.endsWith(nodeobj.delimiter)) {
                             return Error.PartialMatched;
                         }
                         return Error.BranchNodeFound;
@@ -298,7 +327,7 @@ pub fn Trie(comptime T: type) type {
         ///
         ///    fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
         ///        _ = props.level;
-        ///        const delim = props.trie.delimiter;
+        ///        const delim = delimiter;
         ///        const alloc = props.trie.alloc.allocator();
         ///        const node = props.node;
         ///        if (node.endsWith(delim) and node.isBranch()) {
@@ -498,7 +527,7 @@ test "walker" {
 
 fn walkOnTTree(key: []const u8, val: ?*NodeValue, props: anytype) bool {
     _ = props.level;
-    const delim = delimiter;
+    const delim = nodeobj.delimiter;
     const alloc = props.trie.alloc.allocator();
     const node = props.node;
     if (node.endsWith(delim) and node.isBranch()) {
